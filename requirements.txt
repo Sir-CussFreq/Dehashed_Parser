@@ -1,0 +1,5 @@
+# External dependencies for the script
+tqdm  # Progress bar package
+
+# All other libraries are part of Python's standard library
+# Usage: pip install -r requirements.txt
