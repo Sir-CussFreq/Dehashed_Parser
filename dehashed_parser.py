@@ -219,15 +219,12 @@ def main():
         return
 
     if args.append:
-        # Appending data to the existing table
-        if not confirm_deletion_or_append(args.db, append=True, force_drop=args.yes):
-            return
-
+        # If appending, skip confirmation and proceed
         conn = sqlite3.connect(args.db)
         table_name = args.name
         append_json(args.file, conn, table_name)
     else:
-        # Dropping and recreating the table
+        # Dropping and recreating the table with sanity check or -y to skip
         if not confirm_deletion_or_append(args.db, force_drop=args.yes):
             return
 
