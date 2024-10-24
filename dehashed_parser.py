@@ -248,13 +248,23 @@ def append_json(json_file, conn, table_name):
 
 # Function to determine if the password is likely a hash (basic check)
 def is_likely_hash(password):
-    # Common hash lengths (MD5: 32, SHA-1: 40, SHA-256: 64, etc.)
-    common_hash_lengths = [32, 40, 64]
-    
-    # Check if the password length matches a common hash length and is hex-like or base64
-    if len(password) in common_hash_lengths:
-        if re.match(r'^[a-fA-F0-9]+$', password) or re.match(r'^[A-Za-z0-9+/=]+$', password):
+    # Check for known hash lengths (MD5, SHA-1, SHA-256, etc.)
+    hash_lengths = {32, 40, 64}
+
+    # Base64 (good enough) check: drop passwords longer than 30 characters and ending with "=" (padding)
+    if len(password) > 30 and password.endswith('='):
+        return True
+
+    # Check if the password length matches a typical hash length
+    if len(password) in hash_lengths:
+        # Check if the password contains only hexadecimal characters (for hashes like MD5, SHA)
+        if re.fullmatch(r'[a-fA-F0-9]+', password):
             return True
+
+    # Check for known hash prefixes like "$" (common for bcrypt, crypt, etc.)
+    if password.startswith('$'):
+        return True
+
     return False
 
 # Function to validate if the email looks legitimate
