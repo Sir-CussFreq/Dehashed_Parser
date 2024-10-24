@@ -135,79 +135,59 @@ def analyze_data(conn, table_name):
     print(f"Total number of records with no passwords: {total_no_passwords}")
     print("------------------------------\n")
 
-# Function to generate user:pass file for records with cleartext passwords
-def generate_userpass_file(conn, table_name, userpass_file):
-    cursor = conn.cursor()
-    
-    # Query to fetch records with cleartext passwords
-    userpass_query = f"""
-    SELECT email, name, username, password
-    FROM {table_name}
-    WHERE password IS NOT NULL AND password != '';
-    """
-    cursor.execute(userpass_query)
-    records = cursor.fetchall()
-    
-    with open(userpass_file, 'w') as f:
-        for record in records:
-            email, name, username, password = record
-            entries = set()
-            
-            if email and email.strip():
-                entries.add(email.replace(" ", "_"))
-            if name and name.strip():
-                entries.add(name.replace(" ", "_"))
-            if username and username.strip():
-                entries.add(username.replace(" ", "_"))
-            
-            for entry in entries:
-                f.write(f"{entry}:{password}\n")
-    
-    print(f"Userpass file '{userpass_file}' generated successfully!")
+# Function to append data from additional JSON file with duplication check
+def append_json(json_file, conn, table_name):
+    print(f"Appending data from {json_file} into the existing table {table_name}...")
 
-# Parse JSON data
-def parse_json(json_file, conn, table_name, drop_existing=True, filter_key=None):
     with open(json_file, 'r') as f:
         data = json.load(f)
-
-        if 'balance' in data:
-            balance = data['balance']
-            print(f"Starting Balance: {balance}")
-
+    
         entries = data.get('entries', [])
         if not entries:
-            raise ValueError("No entries available to parse.")
+            raise ValueError("No entries available to append.")
 
-        schema = infer_schema(entries)
-
-        cursor = conn.cursor()
-        create_table(cursor, table_name, schema, drop_existing)
-
-        for item in tqdm(entries, desc="Inserting records"):
+        for item in tqdm(entries, desc="Appending records"):
             item = rename_id_field(item)
             columns = list(item.keys())
             values = list(item.values())
-            if filter_key and filter_key not in item:
-                continue
-            insert_records(conn, table_name, columns, values)
+            
+            # Check for duplicates before inserting
+            cursor = conn.cursor()
+            check_query = f"SELECT COUNT(*) FROM {table_name} WHERE email=? OR username=? OR name=?"
+            cursor.execute(check_query, (item.get('email'), item.get('username'), item.get('name')))
+            duplicate_count = cursor.fetchone()[0]
+            
+            if duplicate_count == 0:
+                insert_records(conn, table_name, columns, values)
+            else:
+                print(f"Skipping duplicate record for email: {item.get('email')}, username: {item.get('username')}, name: {item.get('name')}")
 
-# Confirm before dropping tables
-def confirm_deletion(db_file):
+# Confirm before dropping or appending to tables
+def confirm_deletion_or_append(db_file, append=False, force_drop=False):
+    if force_drop:
+        return True
     if os.path.exists(db_file):
         while True:
-            response = input(f"The database {db_file} already exists. Dropping the tables will delete existing data. Proceed? (Y/N): ")
+            if append:
+                response = input(f"The database {db_file} already exists. Would you like to append data to the existing table? (Y/N): ")
+            else:
+                response = input(f"The database {db_file} already exists. Dropping the tables will delete existing data. Proceed? (Y/N): ")
             if response.strip().lower() == 'y':
                 return True
             elif response.strip().lower() == 'n':
-                print("You chose not to drop the existing tables.")
-                response_t = input("Would you like to create new tables with the -t option? (Y/N): ")
-                if response_t.strip().lower() == 'y':
-                    return 'timestamp'
-                elif response_t.strip().lower() == 'n':
-                    print("Operation canceled.")
+                if append:
+                    print("Appending data was canceled.")
                     return False
                 else:
-                    print("Invalid input. Please enter 'Y' or 'N'.")
+                    print("You chose not to drop the existing tables.")
+                    response_t = input("Would you like to create new tables with the -t option? (Y/N): ")
+                    if response_t.strip().lower() == 'y':
+                        return 'timestamp'
+                    elif response_t.strip().lower() == 'n':
+                        print("Operation canceled.")
+                        return False
+                    else:
+                        print("Invalid input. Please enter 'Y' or 'N'.")
             else:
                 print("Invalid input. Please enter 'Y' or 'N'.")
     return True
@@ -225,8 +205,10 @@ def check_file_size(file_path):
 def main():
     parser = argparse.ArgumentParser(description="Parse DeHashed JSON output and insert data into an SQLite database.")
     parser.add_argument('-f', '--file', required=True, help="Path to the DeHashed JSON file")
+    parser.add_argument('-a', '--append', help="Append data from an additional JSON file to the existing table", action='store_true')
     parser.add_argument('-d', '--db', default="dehashed_results.db", help="Path to the SQLite database file (default is 'dehashed_results.db')")
     parser.add_argument('-t', '--timestamp', action='store_true', help="Create new tables with a datetime stamp instead of dropping and recreating existing tables")
+    parser.add_argument('-y', '--yes', action='store_true', help="Skip confirmation and force drop the table")
     parser.add_argument('-u', '--userpass', nargs='?', const='userpass.txt', help="Generate user:pass file (default: 'userpass.txt')")
     parser.add_argument('--filter', help="Only import data that matches the given key")
     parser.add_argument('--name', help="Custom name for the target table", default="dehashed_results")
@@ -236,21 +218,27 @@ def main():
     if not check_file_size(args.file):
         return
 
-    if not args.timestamp:
-        deletion_result = confirm_deletion(args.db)
-        if deletion_result == 'timestamp':
-            args.timestamp = True
-        elif not deletion_result:
+    if args.append:
+        # Appending data to the existing table
+        if not confirm_deletion_or_append(args.db, append=True, force_drop=args.yes):
             return
 
-    conn = sqlite3.connect(args.db)
-
-    if args.timestamp:
-        table_name = f"{args.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    else:
+        conn = sqlite3.connect(args.db)
         table_name = args.name
+        append_json(args.file, conn, table_name)
+    else:
+        # Dropping and recreating the table
+        if not confirm_deletion_or_append(args.db, force_drop=args.yes):
+            return
 
-    parse_json(args.file, conn, table_name, drop_existing=not args.timestamp, filter_key=args.filter)
+        conn = sqlite3.connect(args.db)
+
+        if args.timestamp:
+            table_name = f"{args.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        else:
+            table_name = args.name
+
+        parse_json(args.file, conn, table_name, drop_existing=not args.timestamp, filter_key=args.filter)
 
     # Run data analysis after processing
     analyze_data(conn, table_name)

@@ -4,9 +4,14 @@
 
 ## Features
 
-- Parses DeHashed API JSON output and inserts parsed entries into a SQLite database
+- Parses DeHashed API JSON output
+- Displays the starting balance from the JSON file
+- Inserts parsed entries into a SQLite database
+- Renames conflicting `id` fields to `json_id` to avoid conflicts with the primary key
+- Provides options to create new tables with timestamps or drop existing tables
 - Supports filtering of data by a specific key
-- -u switch generates a `user:pass` file for records with cleartext passwords
+- Appends data from additional JSON files without duplicating existing records
+- Generates a `user:pass` file for records with cleartext passwords
 
 ## Prerequisites
 
@@ -20,13 +25,13 @@
 1. Clone the repository:
 
    ```bash
-   git clone https://github.com/Sir-CussFreq/dehashed_parser.git
+   git clone https://github.com/Sir-CussFreq/Dehashed_Parser.git
    ```
 
 2. Navigate to the project directory:
 
    ```bash
-   cd dehashed_parser
+   cd Dehashed_Parser
    ```
 
 3. Install the required dependencies:
@@ -51,17 +56,31 @@ Run the script with the following options:
 
 - `-d, --db`: Path to the SQLite database file (default is `dehashed_results.db`).
 - `-t, --timestamp`: Create new tables with a timestamp instead of dropping existing ones.
+- `-a, --append`: Append data from an additional JSON file to the existing table.
+- `-y, --yes`: Skip confirmation prompts and force table drop.
 - `-u, --userpass`: Generate a `user:pass` file for records with cleartext passwords (default: `userpass.txt`).
 - `--filter`: Filter data based on a specific key.
 - `--name`: Custom name for the table (default is `dehashed_results`).
 
 ### Example
 
+- **Append data to an existing table**:
+
    ```bash
-   python3 ./dehashed_parser.py -f dehashed_data.json --name custom_table --filter email -u userpass_output.txt
+   python3 ./dehashed_parser.py -f additional_data.json -a
    ```
 
-This command will parse `dehashed_data.json`, store the results in `custom_table` in the default SQLite database `dehashed_results.db`, filter based on the `email` field, and generate a `userpass_output.txt` file with cleartext passwords.
+- **Force table drop without confirmation**:
+
+   ```bash
+   python3 ./dehashed_parser.py -f dehashed_data.json -y
+   ```
+
+- **Generate user:pass file**:
+
+   ```bash
+   python3 ./dehashed_parser.py -f dehashed_data.json -u userpass_output.txt
+   ```
 
 ### Userpass File Format
 
@@ -94,4 +113,4 @@ Contributions are welcome! Please feel free to submit a pull request or open an 
 
 ## Contact
 
-If you have any questions, feel free to open an issue or contact me via GitHub.
+If you have any questions, feel free to open an issue or contact me via GitHub: [Sir-CussFreq](https://github.com/Sir-CussFreq/Dehashed_Parser).
