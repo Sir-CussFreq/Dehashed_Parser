@@ -4,13 +4,9 @@
 
 ## Features
 
-- Parses DeHashed API JSON output
-- Displays the starting balance from the JSON file
-- Inserts parsed entries into a SQLite database
-- Renames conflicting `id` fields to `json_id` to avoid conflicts with the primary key
-- Provides options to create new tables with timestamps or drop existing tables
+- Parses DeHashed API JSON output and inserts parsed entries into a SQLite database
 - Supports filtering of data by a specific key
-- Generates a `user:pass` file for records with cleartext passwords
+- -u switch generates a `user:pass` file for records with cleartext passwords
 
 ## Prerequisites
 
