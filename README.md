@@ -1,20 +1,26 @@
 # DeHashed Parser
 
-`dehashed_parser` is a Python script designed to parse JSON output from the DeHashed API and store the entries in a SQLite database.
+`dehashed_parser` is a Python script designed to parse JSON output from the DeHashed API and store the entries into a SQLite database. It ensures proper handling of ID fields, prevents conflicts, and allows flexible table creation options. The script includes functionality for filtering, data analysis, and generating userpass files.
 
 ## Features
 
 - Parses DeHashed API JSON output and inserts parsed entries into a SQLite database
 - Supports filtering of data by a specific key
-- Option to append data from additional JSON files without duplicating existing records
-- Option to generate a `user:pass` file for records with cleartext passwords
+- Supports appending data from additional JSON files without duplicating existing records
+- Option to generate an alphabetically sorted `user:pass` file for records with cleartext passwords
 
 ## Prerequisites
 
 - Python 3.x
 - SQLite
-- Required Python libraries (listed in `requirements.txt`):
-  - `tqdm`
+
+### Required Python libraries:
+- `tqdm`
+- Install the required libraries via pip:
+
+   ```bash
+   pip install tqdm
+   ```
 
 ## Installation
 
@@ -27,86 +33,71 @@
 2. Navigate to the project directory:
 
    ```bash
-   cd Dehashed_Parser
-   ```
-
-3. Install the required dependencies:
-
-   ```bash
-   pip install -r requirements.txt
+   cd DeHashed_Parser
    ```
 
 ## Usage
 
-Run the script with the following options:
+### Basic Usage
 
-   ```bash
-   python3 ./dehashed_parser.py -f <path_to_json_file> [options]
-   ```
+To parse a JSON file from DeHashed API and insert the data into the database:
 
-### Required Arguments
+```bash
+python3 ./dehashed_parser.py -f data.json
+```
 
-- `-f, --file`: Path to the DeHashed JSON file.
+By default, the database will be saved as `dehashed_results.db` in the current directory.
 
 ### Optional Arguments
 
-- `-d, --db`: Path to the SQLite database file (default is `dehashed_results.db`).
-- `-t, --timestamp`: Create new tables with a timestamp instead of dropping existing ones.
-- `-a, --append`: Append data from an additional JSON file to the existing table.
-- `-y, --yes`: Skip confirmation prompts and force table drop.
-- `-u, --userpass`: Generate a `user:pass` file for records with cleartext passwords (default: `userpass.txt`).
-- `--filter`: Filter data based on a specific key.
-- `--name`: Custom name for the table (default is `dehashed_results`).
+- `-d`, `--db`: Specify a custom SQLite database name (default is `dehashed_results.db`).
+- `-t`, `--timestamp`: Create a new table with a timestamp instead of dropping the existing table.
+- `-a`, `--append`: Append data from an additional JSON file to the existing table.
+- `-y`, `--yes`: Skip confirmation and force drop the table.
+- `-u`, `--userpass`: Generate a `user:pass` file for records with cleartext passwords (default is `userpass.txt`).
+- `--nohashcheck`: Skip the check for hashed passwords when generating the userpass file.
+- `--filter`: Only import data that matches the specified key.
+- `--name`: Custom name for the target table.
 
-### Example
+### Example Commands
 
-- **Append data to an existing table**:
-
+1. **Create a new table with a timestamp**:
    ```bash
-   python3 ./dehashed_parser.py -f additional_data.json -a
+   python3 ./dehashed_parser.py -f data.json -t
    ```
 
-- **Force table drop without confirmation**:
-
+2. **Append data from another JSON file**:
    ```bash
-   python3 ./dehashed_parser.py -f dehashed_data.json -y
+   python3 ./dehashed_parser.py -f data.json -a
    ```
 
-- **Generate user:pass file**:
-
+3. **Generate a `user:pass` file without hash checks**:
    ```bash
-   python3 ./dehashed_parser.py -f dehashed_data.json -u userpass_output.txt
+   python3 ./dehashed_parser.py -f data.json -u userpass.txt --nohashcheck
    ```
 
-### Userpass File Format
+### Data Analysis
 
-If the `-u` option is provided, the script will generate a `user:pass` file for records that contain cleartext passwords. The `email`, `name`, and `username` fields will be processed as follows:
-- Spaces will be replaced with underscores (`_`).
-- If more than one field contains data, each unique combination will be written to the file on separate lines.
+After processing, the script will provide analysis of the records, including:
 
-#### Example
+- Total number of records
+- Total number of records with cleartext passwords
+- Total number of records with hashed passwords but no cleartext passwords
+- Total number of records with no passwords
 
-For a record with the following fields:
-- `email`: `john@doe.com`
-- `name`: `John Doe`
-- `username`: `jdoe`
-- `password`: `asdf1234`
+The results are displayed in color for easy readability.
 
-The generated file will contain:
-```
-john@doe.com:asdf1234
-John_Doe:asdf1234
-jdoe:asdf1234
+### Output Example:
+
+```bash
+--- Data Analysis Results ---
+Total number of records: 1000
+Total number of records with cleartext passwords: 500
+Total number of records with hashed passwords but no cleartext passwords: 300
+Total number of records with no passwords: 200
+------------------------------
 ```
 
 ## License
 
 This project is licensed under the MIT License.
-
-## Contributions
-
-Contributions are welcome! Please feel free to submit a pull request or open an issue to discuss improvements.
-
-## Contact
-
-If you have any questions, feel free to open an issue or contact me via GitHub: [Sir-CussFreq](https://github.com/Sir-CussFreq/Dehashed_Parser).
