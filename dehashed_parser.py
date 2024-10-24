@@ -14,9 +14,6 @@ MAX_FILE_SIZE = 100 * 1024 * 1024  # 100 MB
 
 # Function to validate and infer data type
 def infer_data_type(value):
-    """
-    Try to infer the SQLite data type based on the value. If validation fails, fallback to TEXT.
-    """
     if isinstance(value, int):
         return "INTEGER"
     elif isinstance(value, float):
@@ -31,20 +28,12 @@ def infer_data_type(value):
 
 # Function to handle renaming the 'id' field if present in JSON
 def rename_id_field(record):
-    """
-    Rename the 'id' field to 'json_id' if it exists in the record to avoid conflict with the SQLite primary key 'id'.
-    """
     if 'id' in record:
         record['json_id'] = record.pop('id')
     return record
 
 # Function to infer the schema from the first record
 def infer_schema(data):
-    """
-    Infers the table schema based on the structure of the JSON data.
-    If the data is a list, infer the schema from the first item.
-    If the data is a dictionary, infer the schema from the dictionary itself.
-    """
     if isinstance(data, list):
         if not data:
             raise ValueError("No data available to infer schema from the list.")
@@ -100,34 +89,106 @@ def insert_records(conn, table_name, columns, values):
     finally:
         conn.commit()
 
+# Function to analyze the data in the database and output results
+def analyze_data(conn, table_name):
+    cursor = conn.cursor()
+    
+    # Total number of records
+    total_records_query = f"SELECT COUNT(*) AS total_records FROM {table_name};"
+    cursor.execute(total_records_query)
+    total_records = cursor.fetchone()[0]
+    
+    # Total number of records with cleartext passwords
+    cleartext_passwords_query = f"""
+    SELECT COUNT(*) AS total_cleartext_passwords
+    FROM {table_name}
+    WHERE password IS NOT NULL AND password != '';
+    """
+    cursor.execute(cleartext_passwords_query)
+    total_cleartext_passwords = cursor.fetchone()[0]
+    
+    # Total number of records with hashed passwords but no cleartext passwords
+    hashed_passwords_query = f"""
+    SELECT COUNT(*) AS total_hashed_passwords
+    FROM {table_name}
+    WHERE (password IS NULL OR password = '')
+    AND hashed_password IS NOT NULL AND hashed_password != '';
+    """
+    cursor.execute(hashed_passwords_query)
+    total_hashed_passwords = cursor.fetchone()[0]
+    
+    # Total number of records with no passwords
+    no_passwords_query = f"""
+    SELECT COUNT(*) AS no_passwords
+    FROM {table_name}
+    WHERE (password IS NULL OR password = '')
+    AND (hashed_password IS NULL OR hashed_password = '');
+    """
+    cursor.execute(no_passwords_query)
+    total_no_passwords = cursor.fetchone()[0]
+    
+    # Output results
+    print("\n--- Data Analysis Results ---")
+    print(f"Total number of records: {total_records}")
+    print(f"Total number of records with cleartext passwords: {total_cleartext_passwords}")
+    print(f"Total number of records with hashed passwords but no cleartext passwords: {total_hashed_passwords}")
+    print(f"Total number of records with no passwords: {total_no_passwords}")
+    print("------------------------------\n")
+
+# Function to generate user:pass file for records with cleartext passwords
+def generate_userpass_file(conn, table_name, userpass_file):
+    cursor = conn.cursor()
+    
+    # Query to fetch records with cleartext passwords
+    userpass_query = f"""
+    SELECT email, name, username, password
+    FROM {table_name}
+    WHERE password IS NOT NULL AND password != '';
+    """
+    cursor.execute(userpass_query)
+    records = cursor.fetchall()
+    
+    with open(userpass_file, 'w') as f:
+        for record in records:
+            email, name, username, password = record
+            entries = set()
+            
+            if email and email.strip():
+                entries.add(email.replace(" ", "_"))
+            if name and name.strip():
+                entries.add(name.replace(" ", "_"))
+            if username and username.strip():
+                entries.add(username.replace(" ", "_"))
+            
+            for entry in entries:
+                f.write(f"{entry}:{password}\n")
+    
+    print(f"Userpass file '{userpass_file}' generated successfully!")
+
 # Parse JSON data
 def parse_json(json_file, conn, table_name, drop_existing=True, filter_key=None):
     with open(json_file, 'r') as f:
-        data = json.load(f)  # Load the full JSON file into memory
+        data = json.load(f)
 
-        # Check for balance and print it
         if 'balance' in data:
             balance = data['balance']
             print(f"Starting Balance: {balance}")
 
-        # Extract entries for processing
         entries = data.get('entries', [])
         if not entries:
             raise ValueError("No entries available to parse.")
 
-        # Infer schema based on the first record in entries
         schema = infer_schema(entries)
 
         cursor = conn.cursor()
         create_table(cursor, table_name, schema, drop_existing)
 
-        # Insert records from entries
         for item in tqdm(entries, desc="Inserting records"):
-            item = rename_id_field(item)  # Rename the 'id' field if necessary
+            item = rename_id_field(item)
             columns = list(item.keys())
             values = list(item.values())
             if filter_key and filter_key not in item:
-                continue  # Skip this record if it doesn't match the filter
+                continue
             insert_records(conn, table_name, columns, values)
 
 # Confirm before dropping tables
@@ -162,23 +223,19 @@ def check_file_size(file_path):
 
 # Main function to handle command-line arguments and process
 def main():
-    # Set up argument parser
     parser = argparse.ArgumentParser(description="Parse DeHashed JSON output and insert data into an SQLite database.")
-    
-    # Add arguments for JSON file, database file, and additional options
     parser.add_argument('-f', '--file', required=True, help="Path to the DeHashed JSON file")
     parser.add_argument('-d', '--db', default="dehashed_results.db", help="Path to the SQLite database file (default is 'dehashed_results.db')")
     parser.add_argument('-t', '--timestamp', action='store_true', help="Create new tables with a datetime stamp instead of dropping and recreating existing tables")
+    parser.add_argument('-u', '--userpass', nargs='?', const='userpass.txt', help="Generate user:pass file (default: 'userpass.txt')")
     parser.add_argument('--filter', help="Only import data that matches the given key")
     parser.add_argument('--name', help="Custom name for the target table", default="dehashed_results")
 
     args = parser.parse_args()
 
-    # Check the file size
     if not check_file_size(args.file):
         return
 
-    # If timestamp is not provided, confirm deletion if the database exists
     if not args.timestamp:
         deletion_result = confirm_deletion(args.db)
         if deletion_result == 'timestamp':
@@ -186,19 +243,22 @@ def main():
         elif not deletion_result:
             return
 
-    # Connect to SQLite database
     conn = sqlite3.connect(args.db)
 
-    # Set the table name with or without timestamp
     if args.timestamp:
         table_name = f"{args.name}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     else:
         table_name = args.name
 
-    # Start parsing the JSON file
     parse_json(args.file, conn, table_name, drop_existing=not args.timestamp, filter_key=args.filter)
 
-    # Gracefully close the database connection
+    # Run data analysis after processing
+    analyze_data(conn, table_name)
+
+    # Generate userpass file if -u option is specified
+    if args.userpass:
+        generate_userpass_file(conn, table_name, args.userpass)
+
     try:
         conn.close()
     except sqlite3.Error as e:

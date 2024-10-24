@@ -10,6 +10,7 @@
 - Renames conflicting `id` fields to `json_id` to avoid conflicts with the primary key
 - Provides options to create new tables with timestamps or drop existing tables
 - Supports filtering of data by a specific key
+- Generates a `user:pass` file for records with cleartext passwords
 
 ## Prerequisites
 
@@ -54,16 +55,38 @@ Run the script with the following options:
 
 - `-d, --db`: Path to the SQLite database file (default is `dehashed_results.db`).
 - `-t, --timestamp`: Create new tables with a timestamp instead of dropping existing ones.
+- `-u, --userpass`: Generate a `user:pass` file for records with cleartext passwords (default: `userpass.txt`).
 - `--filter`: Filter data based on a specific key.
 - `--name`: Custom name for the table (default is `dehashed_results`).
 
 ### Example
 
    ```bash
-   python3 ./dehashed_parser.py -f dehashed_data.json --name custom_table --filter email
+   python3 ./dehashed_parser.py -f dehashed_data.json --name custom_table --filter email -u userpass_output.txt
    ```
 
-This command will parse `dehashed_data.json` and insert the results into the default SQLite database `dehashed_results.db`, storing the entries in a table named `custom_table`. Only records with the key `email` will be inserted.
+This command will parse `dehashed_data.json`, store the results in `custom_table` in the default SQLite database `dehashed_results.db`, filter based on the `email` field, and generate a `userpass_output.txt` file with cleartext passwords.
+
+### Userpass File Format
+
+If the `-u` option is provided, the script will generate a `user:pass` file for records that contain cleartext passwords. The `email`, `name`, and `username` fields will be processed as follows:
+- Spaces will be replaced with underscores (`_`).
+- If more than one field contains data, each unique combination will be written to the file on separate lines.
+
+#### Example
+
+For a record with the following fields:
+- `email`: `john@doe.com`
+- `name`: `John Doe`
+- `username`: `jdoe`
+- `password`: `asdf1234`
+
+The generated file will contain:
+```
+john@doe.com:asdf1234
+John_Doe:asdf1234
+jdoe:asdf1234
+```
 
 ## License
 
